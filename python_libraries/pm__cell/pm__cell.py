@@ -650,7 +650,7 @@ class Cell:
 			log.error("Transformation matrix is not regular, transformation is not performed")
 			return
 		if np.linalg.det(M) != 1:
-			log.error("Transformation matrix is not unitary (changes volume), transformation is not performed")
+			log.error("Transformation mcaatrix is not unitary (changes volume), transformation is not performed")
 			return
 
 		log.info("Tranformation matrix (det=%lf):\n"%np.linalg.det(M) + str(M))
