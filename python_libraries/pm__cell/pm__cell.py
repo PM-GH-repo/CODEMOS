@@ -367,6 +367,85 @@ class Cell:
 			fin.close()
 
 
+		def readFromLAMMPSStructure(self,filename):
+					"""
+					Reads atomic structure from LAMMPSStructure file\n
+					:param filename: Name of the LAMMPS structural file
+					"""
+					self.mult=1.
+					self.position_flag='Direct'
+					log.info("Reading file in LAMMPS format")
+					fin = open(filename,"r")
+					model = {}
+					with fin as file:
+						aux_line = file.readlines()								
+					#get lattice
+					aux_lat=Lattice()
+					aux_atom=Atom()				
+					model = {}
+					for i, lines in enumerate(aux_line):
+						words = lines.split()
+						if 'atoms' in words:
+							model['atoms'] = int(words[words.index('atoms') - 1])
+						if 'bonds' in words:
+							model['bonds'] = int(words[words.index('bonds') - 1])
+						if 'atom' in words and 'types' in  words:
+							model['atom types'] = int(words[words.index('atom') - 1])
+						if 'bond' in words and 'types' in  words:
+							model['bond types'] = int(words[words.index('bond') - 1])
+						if "xlo" in words:							
+							aux_lat.a[0] = float(words[words.index('xlo') - 1])
+						if "ylo" in words:
+							aux_lat.b[1] = float(words[words.index('ylo') - 1])
+						if "zlo" in words:
+							aux_lat.c[2] = float(words[words.index('zlo') - 1])							
+						aux_lat.getAnglesFromVectors()
+						self.lattice=aux_lat
+						if "Masses" in words:      
+							k = i  
+							model['atom mass'] = {} 
+							for j in range(2,model['atom types']+2):
+								mass_line = aux_line[i+j]
+								masses = mass_line.split()
+								atom_type = int(masses[0])
+								atom_mass = float(masses[1])    
+								model['atom mass'][atom_type]= float(masses[1])
+						if "Atoms" in words:      
+							k = i  
+							model['total_atoms'] = {} 
+							print(model['atoms'],'hi')
+							for j in range(2,model['atoms']+2):
+								atoms_line = aux_line[i+j]
+							# print(j,atoms_line)
+								atoms_details = atoms_line.split()
+								# print(atoms_details,"hi")
+								atoms_tag = int(atoms_details[0])
+								bond_tag = int(atoms_details[1])
+								atom_type = int(atoms_details[2])
+								atom_charge = float(atoms_details[3]) 
+								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]               
+								if atoms_tag not in model['total_atoms']:
+									model['total_atoms'][atoms_tag] = {}
+									model['total_atoms'][atoms_tag]["bond_tag"] = bond_tag
+									model['total_atoms'][atoms_tag]["atom_type"] = atom_type
+									model['total_atoms'][atoms_tag]["atom_charge"] = atom_charge
+									model['total_atoms'][atoms_tag]["pos"] = pos			
+								if(atom_type>int(model['atom types']/2)):
+									aux_atom.coreshell = "shell"
+									aux_atom.position_frac = pos
+									aux_atom.name = str(atom_type)
+									aux_atom.charge = atom_charge
+									self.N+=1
+									self.atom.append(copy.deepcopy(aux_atom))
+								else:
+									aux_atom.coreshell = "core"
+									aux_atom.position_frac = pos
+									aux_atom.name = str(atom_type)
+									aux_atom.charge = atom_charge
+									self.N+=1
+									self.atom.append(copy.deepcopy(aux_atom))
+
+
 		if 	convention == 'POSCAR' or \
 			re.findall('VASP',filename.upper()) or \
 			re.findall('CONTCAR',filename.upper()) or \
@@ -383,6 +462,8 @@ class Cell:
 			readFromDLPoly(self,filename)
 		elif convention == 'XYZ' or os.path.splitext(filename)[1] == '.XYZ' or os.path.splitext(filename)[1] == '.xyz':
 			readFromXYZ(self,filename)
+		elif convention == 'LAMMPSStructure' or os.path.splitext(filename)[1] == '.LAMMPSStructure' or os.path.splitext(filename)[1] == '.lammpssructure':
+			readFromLAMMPSStructure(self,filename)
 		elif convention == 'zerolist':
 			zeroList(self,prescribe_N)
 		else:
@@ -736,6 +817,43 @@ class Cell:
 		#	fout.write("%2s  " % self.atom[ii].name + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
 
 		fout.close()
+
+
+		def writeToLAMMPSStructure(self, filename):
+				""" writes the current cell to LAMMPSStructure file """
+				nfile=os.path.splitext(filename)[0] + ".structure_in"
+				log.info("Writing file to " + nfile + " in LAMMPSStructure format")
+				fout = open(nfile,"w")
+
+				fout.write(f"{int(self.N*2)}\tatoms\n")
+				fout.write(f"{int(self.N)}\tbonds\n\n")
+
+				fout.write(f"{int(2*len(self.species_count))}\tatom types\n")
+				fout.write(f"{int(len(self.species_count))}\tbond types\n\n")
+
+				fout.write(f"{0.0} {self.lattice.a[0]:.6f}\t xlo xhi\n")
+				fout.write(f"{0.0} {self.lattice.b[1]:.6f}\t ylo yhi\n")
+				fout.write(f"{0.0} {self.lattice.c[2]:.6f}\t zlo zhi\n\n")
+
+				fout.write("Masses\n")
+				for ii in range(2*len(self.species_count)):
+					fout.write(f"{ii+1}\t i \n")
+				fout.write(f"\n")
+				fout.write(f"\nAtoms\n")
+
+				for ii in range(self.N):
+					#get carthesian coordintes
+					x1=[self.atom[ii].position_frac[0]*self.lattice.a[jj] for jj in range(3)]
+					x2=[self.atom[ii].position_frac[1]*self.lattice.b[jj] for jj in range(3)]
+					x3=[self.atom[ii].position_frac[2]*self.lattice.c[jj] for jj in range(3)]
+					pos=list(map(sum,zip(x1,x2,x3)))
+					for kk in range(len(self.species_count)):
+						if self.atom[ii].name == self.species_name[kk]:
+							jj = kk+1
+						#fout.write("%3s  " % jj +  self.atom[ii].name + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
+							fout.write("%3s  " % jj +  self.atom[ii].name + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
+				fout.close()
+
 
 
 	def writeToFINDSYM(self,filename):
@@ -1193,4 +1311,3 @@ class Cell:
 							
 
 		
-
