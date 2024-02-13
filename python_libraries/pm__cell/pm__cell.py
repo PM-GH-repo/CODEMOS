@@ -836,7 +836,7 @@ class Cell:
 			nfile=os.path.splitext(filename)[0] + ".structure_in"
 			log.info("Writing file to " + nfile + " in LAMMPSStructure format")
 			fout = open(nfile,"w")
-
+			fout.write(f"\n")
 			fout.write(f"{int(self.N)}\tatoms\n")
 			fout.write(f"{int(self.N/2)}\tbonds\n\n")
 
@@ -847,7 +847,7 @@ class Cell:
 			fout.write(f"{0.0} {self.lattice.b[1]:.6f}\t ylo yhi\n")
 			fout.write(f"{0.0} {self.lattice.c[2]:.6f}\t zlo zhi\n\n")
 
-			fout.write("Masses\n")
+			fout.write("Masses\n\n")
 			for ii in range(len(self.species_count)):
 				if(self.shell_models['PTO_shimada'][ii+1]['core']['mass']!= None):
 					fout.write(f"{ii+1}\t {self.shell_models['PTO_shimada'][ii+1]['core']['mass']} \n")
