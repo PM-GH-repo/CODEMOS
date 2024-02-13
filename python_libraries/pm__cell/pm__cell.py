@@ -106,6 +106,10 @@ class Cell:
 		self.species_name=[]
 		self.N=0
 
+		 # Adding the shell_models as an attribute
+		self.shell_models ={}
+		self.shell_models["PTO_shimada"]= {}
+
 		def zeroList(self,perscribe_N):
 			self.position_flag='Direct'
 			self.lattice=Lattice()
@@ -115,7 +119,8 @@ class Cell:
 				aux_atom.position_frac=[0.,0.,0.,]
 				aux_atom.name="NN"
 				self.atom.append(copy.deepcopy(aux_atom))
-	
+
+
 		def readFromPOSCAR(self,filename):
 			"""
 			Reads atomic structure from POSCAR (CONTCAR) VASP-file\n
@@ -383,6 +388,7 @@ class Cell:
 					aux_lat=Lattice()
 					aux_atom=Atom()				
 					model = {}
+
 					for i, lines in enumerate(aux_line):
 						words = lines.split()
 						if 'atoms' in words:
@@ -401,19 +407,24 @@ class Cell:
 							aux_lat.c[2] = float(words[words.index('zlo') - 1])							
 						aux_lat.getAnglesFromVectors()
 						self.lattice=aux_lat
-						if "Masses" in words:      
-							k = i  
-							model['atom mass'] = {} 
+
+						if "Masses" in words:
 							for j in range(2,model['atom types']+2):
 								mass_line = aux_line[i+j]
 								masses = mass_line.split()
 								atom_type = int(masses[0])
-								atom_mass = float(masses[1])    
-								model['atom mass'][atom_type]= float(masses[1])
+								atom_mass = float(masses[1])    						
+								self.shell_models["PTO_shimada"][atom_type]= {}#atom_type
+								self.shell_models["PTO_shimada"][atom_type]['core'] = {"charge": None, "mass": None}
+								self.shell_models["PTO_shimada"][atom_type]['shell'] = {"charge": None, "mass": None}
+								if(atom_type<=int(model['atom types']/2)):
+									self.shell_models["PTO_shimada"][atom_type]["core"]["mass"] = atom_mass
+								else:
+									self.shell_models["PTO_shimada"][atom_type]["shell"]["mass"] = atom_mass
 						if "Atoms" in words:      
-							k = i  
+							
 							model['total_atoms'] = {} 
-							print(model['atoms'],'hi')
+							#print(model['atoms'],'hi')
 							for j in range(2,model['atoms']+2):
 								atoms_line = aux_line[i+j]
 							# print(j,atoms_line)
@@ -423,7 +434,8 @@ class Cell:
 								bond_tag = int(atoms_details[1])
 								atom_type = int(atoms_details[2])
 								atom_charge = float(atoms_details[3]) 
-								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]               
+								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]
+								
 								if atoms_tag not in model['total_atoms']:
 									model['total_atoms'][atoms_tag] = {}
 									model['total_atoms'][atoms_tag]["bond_tag"] = bond_tag
@@ -431,12 +443,15 @@ class Cell:
 									model['total_atoms'][atoms_tag]["atom_charge"] = atom_charge
 									model['total_atoms'][atoms_tag]["pos"] = pos			
 								if(atom_type>int(model['atom types']/2)):
+									#if atom_type == s_models["PTO_shimada"]["core"]["atom type"]            
 									aux_atom.coreshell = "shell"
 									aux_atom.position_frac = pos
 									aux_atom.name = str(atom_type)
 									aux_atom.charge = atom_charge
+									self.shell_models["PTO_shimada"][atom_type]["shell"]["charge"] = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
+									#self.shell_models["PTO_shimada"]["shell"]["charge"] = atom_charge
 								else:
 									aux_atom.coreshell = "core"
 									aux_atom.position_frac = pos
@@ -444,7 +459,7 @@ class Cell:
 									aux_atom.charge = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
-
+									self.shell_models["PTO_shimada"][atom_type]["core"]["charge"] = atom_charge
 
 		if 	convention == 'POSCAR' or \
 			re.findall('VASP',filename.upper()) or \
@@ -601,9 +616,6 @@ class Cell:
 			sys.exit(1)
 
 		self.countPresentSpecies()
-
-
-
 
 	
 	def countPresentSpecies(self):
@@ -819,40 +831,63 @@ class Cell:
 		fout.close()
 
 
-		def writeToLAMMPSStructure(self, filename):
-				""" writes the current cell to LAMMPSStructure file """
-				nfile=os.path.splitext(filename)[0] + ".structure_in"
-				log.info("Writing file to " + nfile + " in LAMMPSStructure format")
-				fout = open(nfile,"w")
+	def writeToLAMMPSStructure(self, filename):
+			""" writes the current cell to LAMMPSStructure file """
+			nfile=os.path.splitext(filename)[0] + ".structure_in"
+			log.info("Writing file to " + nfile + " in LAMMPSStructure format")
+			fout = open(nfile,"w")
 
-				fout.write(f"{int(self.N*2)}\tatoms\n")
-				fout.write(f"{int(self.N)}\tbonds\n\n")
+			fout.write(f"{int(self.N)}\tatoms\n")
+			fout.write(f"{int(self.N/2)}\tbonds\n\n")
 
-				fout.write(f"{int(2*len(self.species_count))}\tatom types\n")
-				fout.write(f"{int(len(self.species_count))}\tbond types\n\n")
+			fout.write(f"{int(len(self.species_count))}\tatom types\n")
+			fout.write(f"{int(len(self.species_count)/2)}\tbond types\n\n")
 
-				fout.write(f"{0.0} {self.lattice.a[0]:.6f}\t xlo xhi\n")
-				fout.write(f"{0.0} {self.lattice.b[1]:.6f}\t ylo yhi\n")
-				fout.write(f"{0.0} {self.lattice.c[2]:.6f}\t zlo zhi\n\n")
+			fout.write(f"{0.0} {self.lattice.a[0]:.6f}\t xlo xhi\n")
+			fout.write(f"{0.0} {self.lattice.b[1]:.6f}\t ylo yhi\n")
+			fout.write(f"{0.0} {self.lattice.c[2]:.6f}\t zlo zhi\n\n")
 
-				fout.write("Masses\n")
-				for ii in range(2*len(self.species_count)):
-					fout.write(f"{ii+1}\t i \n")
-				fout.write(f"\n")
-				fout.write(f"\nAtoms\n")
+			fout.write("Masses\n")
+			for ii in range(len(self.species_count)):
+				if(self.shell_models['PTO_shimada'][ii+1]['core']['mass']!= None):
+					fout.write(f"{ii+1}\t {self.shell_models['PTO_shimada'][ii+1]['core']['mass']} \n")
+				else:
+					fout.write(f"{ii+1}\t {self.shell_models['PTO_shimada'][ii+1]['shell']['mass']} \n")	
+			#fout.write(f"\n")
+			fout.write(f"\nAtoms\n\n")
+			jj=0
+			for ii in range(self.N):
+				#pos = tuple(self.atom[ii].position_frac)				
+				#get carthesian coordintes
+				x1=[self.atom[ii].position_frac[0]*self.lattice.a[jj] for jj in range(3)]
+				x2=[self.atom[ii].position_frac[1]*self.lattice.b[jj] for jj in range(3)]
+				x3=[self.atom[ii].position_frac[2]*self.lattice.c[jj] for jj in range(3)]
+				pos=list(map(sum,zip(x1,x2,x3)))
+				if (ii %2) == 0:
+					jj=jj +1 								
+				for kk in range(len(self.species_count)):
+					if self.atom[ii].name == self.species_name[kk]:
+						c_charge =  self.shell_models['PTO_shimada'][kk+1]['core']['charge'] 
+						s_charge =  self.shell_models['PTO_shimada'][kk+1]['shell']['charge']
+						if(c_charge!= None):
+							fout.write("% 3d % 3d  " % (ii+1,jj) +  self.atom[ii].name + " % 15.10f" % c_charge + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
+						else:
+							fout.write("% 3d % 3d  " % (ii+1,jj) +  self.atom[ii].name + " % 15.10f" % s_charge + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
+			fout.write(f"\nBonds\n\n")
+			kk=1
+			for ii in range(int(self.N)):
+						if int(self.atom[ii].name) <= int(len(self.species_count)/2): 
+							fout.write( "%3d \t %3d \t %3d \t %3d \n" % (kk, int(self.atom[ii].name),ii+1,ii+2))
+							kk = kk + 1
 
-				for ii in range(self.N):
-					#get carthesian coordintes
-					x1=[self.atom[ii].position_frac[0]*self.lattice.a[jj] for jj in range(3)]
-					x2=[self.atom[ii].position_frac[1]*self.lattice.b[jj] for jj in range(3)]
-					x3=[self.atom[ii].position_frac[2]*self.lattice.c[jj] for jj in range(3)]
-					pos=list(map(sum,zip(x1,x2,x3)))
-					for kk in range(len(self.species_count)):
-						if self.atom[ii].name == self.species_name[kk]:
-							jj = kk+1
-						#fout.write("%3s  " % jj +  self.atom[ii].name + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
-							fout.write("%3s  " % jj +  self.atom[ii].name + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
-				fout.close()
+			fout.write(f"\nCS-Info\n\n")
+			jj=0
+			for ii in range(int(self.N)):
+				if (ii %2) == 0:
+					jj=jj +1 
+				fout.write("% 3d \t % 3d \n" % (ii+1,jj))	
+			fout.close()
+
 
 
 
