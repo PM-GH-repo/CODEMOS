@@ -388,7 +388,7 @@ class Cell:
 					aux_lat=Lattice()
 					aux_atom=Atom()				
 					model = {}
-
+					cart_pos_lst = []
 					for i, lines in enumerate(aux_line):
 						words = lines.split()
 						if 'atoms' in words:
@@ -424,7 +424,6 @@ class Cell:
 						if "Atoms" in words:      
 							
 							model['total_atoms'] = {} 
-							#print(model['atoms'],'hi')
 							for j in range(2,model['atoms']+2):
 								atoms_line = aux_line[i+j]
 							# print(j,atoms_line)
@@ -435,7 +434,8 @@ class Cell:
 								atom_type = int(atoms_details[2])
 								atom_charge = float(atoms_details[3]) 
 								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]
-								
+								#pos = pos.tolist()
+								cart_pos_lst.append(pos)
 								if atoms_tag not in model['total_atoms']:
 									model['total_atoms'][atoms_tag] = {}
 									model['total_atoms'][atoms_tag]["bond_tag"] = bond_tag
@@ -445,7 +445,7 @@ class Cell:
 								if(atom_type>int(model['atom types']/2)):
 									#if atom_type == s_models["PTO_shimada"]["core"]["atom type"]            
 									aux_atom.coreshell = "shell"
-									aux_atom.position_frac = pos
+									aux_atom.position_frac = [0,0,0]
 									aux_atom.name = str(atom_type)
 									aux_atom.charge = atom_charge
 									self.shell_models["PTO_shimada"][atom_type]["shell"]["charge"] = atom_charge
@@ -454,12 +454,15 @@ class Cell:
 									#self.shell_models["PTO_shimada"]["shell"]["charge"] = atom_charge
 								else:
 									aux_atom.coreshell = "core"
-									aux_atom.position_frac = pos
+									aux_atom.position_frac =  [0,0,0]
 									aux_atom.name = str(atom_type)
 									aux_atom.charge = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
 									self.shell_models["PTO_shimada"][atom_type]["core"]["charge"] = atom_charge
+
+					cart_pos_lst = np.array(cart_pos_lst)			
+					self.setCartesian(cart_pos_lst)
 
 		if 	convention == 'POSCAR' or \
 			re.findall('VASP',filename.upper()) or \
@@ -866,9 +869,10 @@ class Cell:
 				if (ii %2) == 0:
 					jj=jj +1 								
 				for kk in range(len(self.species_count)):
+					atom_tag =	int(self.species_name[kk])
 					if self.atom[ii].name == self.species_name[kk]:
-						c_charge =  self.shell_models['PTO_shimada'][kk+1]['core']['charge'] 
-						s_charge =  self.shell_models['PTO_shimada'][kk+1]['shell']['charge']
+						c_charge =  self.shell_models['PTO_shimada'][atom_tag]['core']['charge'] 
+						s_charge =  self.shell_models['PTO_shimada'][atom_tag]['shell']['charge']
 						if(c_charge!= None):
 							fout.write("% 3d % 3d  " % (ii+1,jj) +  self.atom[ii].name + " % 15.10f" % c_charge + "% 15.10f % 15.10f % 15.10f\n" % tuple(pos))
 						else:
