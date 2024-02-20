@@ -531,6 +531,47 @@ class Cell:
 		del self.atom
 		self.atom=new_list
 
+	def replicate(self,R):
+		"""R is list of [n_x,n_y,n_z] where n idicates the how many times this cell will repeat in respective direction"""
+		if len(R)!=3:
+			log.error("wrong number of elements in list R")
+			return
+		if all(not isinstance(ii, int) and ii < 0 for ii in R):
+			log.error("please provide positive intergers ")
+			return
+		x = self.lattice.a
+		y = self.lattice.b
+		z = self.lattice.c
+		xr = [xx * 2 for xx in x]
+		yr = [yy * 2 for yy in y]
+		zr = [zz * 2 for zz in z]
+		cart_cord = self.getArrayCarthesian()
+		repllica  = Cell(prescribe_N=0)
+		repllica.lattice.a = xr
+		repllica.lattice.b = yr
+		repllica.lattice.c = zr
+		repllica.lattice.getAnglesFromVectors()
+		nx = R[0]
+		ny = R[1]
+		nz = R[2]
+		cart_cord_repllica =[]
+		for ii in range(0,nz):
+			for jj in range(0,ny):
+				for kk in range(0,nx):					
+					for aa in range(len(cart_cord)):
+						ll = cart_cord[aa]
+						pp = ll.tolist()                                    
+						pp[0] = pp[0] + (kk * x[0])
+						pp[1] = pp[1] + (jj * y[1])
+						pp[2] = pp[2] + (ii * z[2])
+						cart_cord_repllica.append(pp)
+						repllica.appendAtom([0,0,0],self.atom[aa].name)
+		cart_cord_repllica = np.array(cart_cord_repllica)
+		repllica.setCartesian(cart_cord_repllica)
+		repllica.shell_models = copy.deepcopy(self.shell_models)
+		return repllica
+	
+
 	def printLatex(self,filename="structure.tex"):
 		""" Print information about cell in Latex format """
 		aaa=10
