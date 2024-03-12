@@ -542,9 +542,9 @@ class Cell:
 		x = self.lattice.a
 		y = self.lattice.b
 		z = self.lattice.c
-		xr = [xx * 2 for xx in x]
-		yr = [yy * 2 for yy in y]
-		zr = [zz * 2 for zz in z]
+		xr = [xx * R[0] for xx in x]
+		yr = [yy * R[1] for yy in y]
+		zr = [zz * R[2] for zz in z]
 		cart_cord = self.getArrayCarthesian()
 		repllica  = Cell(prescribe_N=0)
 		repllica.lattice.a = xr
