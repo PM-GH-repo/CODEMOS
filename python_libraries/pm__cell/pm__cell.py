@@ -92,6 +92,25 @@ class Cell:
 	>>> import pm__cell as pmc
 	>>> cell=pmc.Cell("POSCAR")
 	"""
+	
+
+#	shell_models = {
+#    "PTO_shimada": {
+#        "Pb": {
+#            	'core': {'mass': 207.2, 'charge': 5.49595},
+#            	'shell': {'mass': 0.0001, 'charge': -3.63322}
+#        	}
+#    			},
+#    		"Ti": {
+#        			'core': {'mass': 47.867, 'charge': 19.36901},
+#        			'shell': {'mass': 0.0001, 'charge': -16.27952}
+#   				 },
+#    		"O": {
+#        			'core': {'mass': 15.999, 'charge': 2.54843},
+#        			'shell': {'mass': 0.0001, 'charge': -4.19917}
+#    			}
+#					}
+
 	def __init__(self,filename="default_file",convention=None,prescribe_N=0,comment="no comment"):
 		"""
 		__init__ file for the Cell class\n
@@ -104,11 +123,10 @@ class Cell:
 		self.position_flag=""
 		self.species_count=[]
 		self.species_name=[]
-		self.N=0
-
-		 # Adding the shell_models as an attribute
+		#self.shell_model_name=None
+		#self.shell_model_values={}
 		self.shell_models ={}
-		self.shell_models["PTO_shimada"]= {}
+		self.N=0
 
 		def zeroList(self,perscribe_N):
 			self.position_flag='Direct'
@@ -119,7 +137,7 @@ class Cell:
 				aux_atom.position_frac=[0.,0.,0.,]
 				aux_atom.name="NN"
 				self.atom.append(copy.deepcopy(aux_atom))
-
+	
 
 		def readFromPOSCAR(self,filename):
 			"""
@@ -203,7 +221,6 @@ class Cell:
 			if aux_is_names_line:
 				self.changeElementNames(self.species_name)
 
-
 		def readFromGulp(self,filename):
 			"""
 			Reads atomic structure from GULP file\n
@@ -260,6 +277,7 @@ class Cell:
 			fin.close()
 
 		def readFromDLPoly(self,filename):
+
 			"""
 			Reads atomic structure from DLPOLY file\n
 			:param filename: Name of the DLPOLY structural file
@@ -305,7 +323,9 @@ class Cell:
 				{}	#catching end of file
 			
 			fin.close()
+		
 		def readFromXYZ(self,filename):
+
 			"""
 			Reads atomic structure from XYZ file\n
 			:param filename: Name of the structural file
@@ -370,9 +390,8 @@ class Cell:
 
 			
 			fin.close()
-
-
-		def readFromLAMMPSStructure(self,filename):
+		
+		def readFromLAMMPSStructure(self,filename):#,model_name):
 					"""
 					Reads atomic structure from LAMMPSStructure file\n
 					:param filename: Name of the LAMMPS structural file
@@ -381,7 +400,8 @@ class Cell:
 					self.position_flag='Direct'
 					log.info("Reading file in LAMMPS format")
 					fin = open(filename,"r")
-					model = {}
+							
+
 					with fin as file:
 						aux_line = file.readlines()								
 					#get lattice
@@ -389,6 +409,8 @@ class Cell:
 					aux_atom=Atom()				
 					model = {}
 					cart_pos_lst = []
+					model_data = {}
+					model_data['PTO_shimada'] = {}
 					for i, lines in enumerate(aux_line):
 						words = lines.split()
 						if 'atoms' in words:
@@ -408,27 +430,30 @@ class Cell:
 						aux_lat.getAnglesFromVectors()
 						self.lattice=aux_lat
 
+
 						if "Masses" in words:
 							for j in range(2,model['atom types']+2):
 								mass_line = aux_line[i+j]
 								masses = mass_line.split()
 								atom_type = int(masses[0])
-								atom_mass = float(masses[1])    						
-								self.shell_models["PTO_shimada"][atom_type]= {}#atom_type
-								self.shell_models["PTO_shimada"][atom_type]['core'] = {"charge": None, "mass": None}
-								self.shell_models["PTO_shimada"][atom_type]['shell'] = {"charge": None, "mass": None}
+								atom_mass = float(masses[1])								
+								# Ensure that aux_model_data['PTO_shimada'][atom_type] exists
+								if 'PTO_shimada' not in model_data:
+									model_data['PTO_shimada'] = {}
+								if atom_type not in model_data['PTO_shimada']:
+									model_data['PTO_shimada'][atom_type] = {}							
+								model_data['PTO_shimada'][atom_type]['core'] = {"mass": None, "charge": None }
+								model_data['PTO_shimada'][atom_type]['shell'] = {"mass": None,  "charge": None}
 								if(atom_type<=int(model['atom types']/2)):
-									self.shell_models["PTO_shimada"][atom_type]["core"]["mass"] = atom_mass
+									model_data['PTO_shimada'][atom_type]["core"]["mass"] = atom_mass
 								else:
-									self.shell_models["PTO_shimada"][atom_type]["shell"]["mass"] = atom_mass
+									model_data['PTO_shimada'][atom_type]["shell"]["mass"] = atom_mass		
 						if "Atoms" in words:      
 							
 							model['total_atoms'] = {} 
 							for j in range(2,model['atoms']+2):
 								atoms_line = aux_line[i+j]
-							# print(j,atoms_line)
 								atoms_details = atoms_line.split()
-								# print(atoms_details,"hi")
 								atoms_tag = int(atoms_details[0])
 								bond_tag = int(atoms_details[1])
 								atom_type = int(atoms_details[2])
@@ -436,6 +461,7 @@ class Cell:
 								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]
 								#pos = pos.tolist()
 								cart_pos_lst.append(pos)
+								#print(j,atom_type,atoms_tag)
 								if atoms_tag not in model['total_atoms']:
 									model['total_atoms'][atoms_tag] = {}
 									model['total_atoms'][atoms_tag]["bond_tag"] = bond_tag
@@ -443,15 +469,14 @@ class Cell:
 									model['total_atoms'][atoms_tag]["atom_charge"] = atom_charge
 									model['total_atoms'][atoms_tag]["pos"] = pos			
 								if(atom_type>int(model['atom types']/2)):
-									#if atom_type == s_models["PTO_shimada"]["core"]["atom type"]            
 									aux_atom.coreshell = "shell"
 									aux_atom.position_frac = [0,0,0]
 									aux_atom.name = str(atom_type)
 									aux_atom.charge = atom_charge
-									self.shell_models["PTO_shimada"][atom_type]["shell"]["charge"] = atom_charge
+									#model_data['PTO_shimada'][atom_type] = atom_type
+									model_data['PTO_shimada'][atom_type]["shell"]["charge"] = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
-									#self.shell_models["PTO_shimada"]["shell"]["charge"] = atom_charge
 								else:
 									aux_atom.coreshell = "core"
 									aux_atom.position_frac =  [0,0,0]
@@ -459,10 +484,11 @@ class Cell:
 									aux_atom.charge = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
-									self.shell_models["PTO_shimada"][atom_type]["core"]["charge"] = atom_charge
-
+									model_data['PTO_shimada'][atom_type]["core"]["charge"] = atom_charge
 					cart_pos_lst = np.array(cart_pos_lst)			
 					self.setCartesian(cart_pos_lst)
+					self.shell_models = copy.deepcopy(model_data)
+					
 
 		if 	convention == 'POSCAR' or \
 			re.findall('VASP',filename.upper()) or \
@@ -877,9 +903,10 @@ class Cell:
 
 	def writeToLAMMPSStructure(self, filename):
 			""" writes the current cell to LAMMPSStructure file """
-			nfile=os.path.splitext(filename)[0] + ".structure_in"
+			nfile=os.path.splitext(filename)[0] + ".LAMMPSStructure"
 			log.info("Writing file to " + nfile + " in LAMMPSStructure format")
 			fout = open(nfile,"w")
+			fout.write(f"\n")
 			fout.write(f"\n")
 			fout.write(f"{int(self.N)}\tatoms\n")
 			fout.write(f"{int(self.N/2)}\tbonds\n\n")
