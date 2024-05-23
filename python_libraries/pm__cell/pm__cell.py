@@ -45,7 +45,13 @@ class Atom:
 					self.position_frac[2],
 					)
 		return aux_string
-		
+
+	#def __eq__(self, other):
+	#	if isinstance(other, Atom):
+	#		return self.a == other.a and self.b == other.b
+	#	return False
+
+	
 class Lattice:
 	"""
 	Class for storing information about crystallographic lattice
@@ -422,15 +428,36 @@ class Cell:
 						if 'bond' in words and 'types' in  words:
 							model['bond types'] = int(words[words.index('bond') - 1])
 						if "xlo" in words:							
-							aux_lat.a[0] = float(words[words.index('xlo') - 1])
+							lx = float(words[words.index('xlo') - 1]) - float(words[words.index('xlo') - 2])
+							aux_lat.a[0] =lx
 						if "ylo" in words:
-							aux_lat.b[1] = float(words[words.index('ylo') - 1])
+							ly = float(words[words.index('ylo') - 1]) - float(words[words.index('ylo') - 2])
+							aux_lat.b[1] = ly
 						if "zlo" in words:
-							aux_lat.c[2] = float(words[words.index('zlo') - 1])							
+							lz = float(words[words.index('zlo') - 1]) - float(words[words.index('zlo') - 2])						
+							aux_lat.c[2] = lz
+						#aux_lat.getAnglesFromVectors()
+						#self.lattice=aux_lat
+						# for Triclinic (non-orthogonal) simulation boxes
+						if "xy" in words: 
+							yz = float(words[words.index('xy') - 1])
+							xz = float(words[words.index('xy') - 2])
+							xy = float(words[words.index('xy') - 3])
+							a = lx
+							b = np.sqrt(ly**2 +xy**2)
+							c = np.sqrt(lz**2 + xz**2 + yz**2)
+							alpha = np.arccos((xy*yz +lx*yz)/(b*c))
+							beta = np.arccos(xz/c)
+							gamma = np.arccos(xy/b)
+							aux_lat.a[0] = a # a_x
+							aux_lat.b[0] = b * np.cos(gamma)# b_x
+							aux_lat.b[1] = b * np.sin(gamma)# b_y
+							aux_lat.c[0] = c * np.cos(beta)# c_x
+							aux_lat.c[1] = c * (np.cos(alpha) - np.cos(beta) * np.cos(gamma)) / np.sin(gamma) #c_y
+							aux_lat.c[2] = np.sqrt(c**2 - aux_lat.c[0]**2 - aux_lat.c[1]**2) #c_z
+							#print(alpha,beta,gamma)
 						aux_lat.getAnglesFromVectors()
-						self.lattice=aux_lat
-
-
+						self.lattice=aux_lat	
 						if "Masses" in words:
 							for j in range(2,model['atom types']+2):
 								mass_line = aux_line[i+j]
@@ -910,13 +937,21 @@ class Cell:
 			fout.write(f"\n")
 			fout.write(f"{int(self.N)}\tatoms\n")
 			fout.write(f"{int(self.N/2)}\tbonds\n\n")
-
 			fout.write(f"{int(len(self.species_count))}\tatom types\n")
 			fout.write(f"{int(len(self.species_count)/2)}\tbond types\n\n")
-
-			fout.write(f"{0.0} {self.lattice.a[0]:.6f}\t xlo xhi\n")
-			fout.write(f"{0.0} {self.lattice.b[1]:.6f}\t ylo yhi\n")
-			fout.write(f"{0.0} {self.lattice.c[2]:.6f}\t zlo zhi\n\n")
+			a = np.linalg.norm(self.lattice.a)
+			b = np.linalg.norm(self.lattice.b)
+			c = np.linalg.norm(self.lattice.c)
+			lx = a
+			xy = b * np.cos((self.lattice.gamma)*(np.pi/180))
+			xz = c * np.cos(self.lattice.beta*(np.pi/180))
+			ly = np.sqrt(b**2 - xy**2)
+			yz = ((b*c*np.cos(self.lattice.alpha*(np.pi/180))) - (xy*xz))/ly
+			lz = np.sqrt(c**2-xz**2-yz**2)
+			fout.write(f"{0.0}\t {lx:.6f}\t xlo xhi\n")
+			fout.write(f"{0.0}\t {ly:.6f}\t ylo yhi\n")
+			fout.write(f"{0.0}\t {lz:.6f}\t zlo zhi\n")
+			fout.write(f"{xy:.6f}\t {xz:.6f}\t {yz:.6f}\t xy xz yz\n\n")
 
 			fout.write("Masses\n\n")
 			for ii in range(len(self.species_count)):
