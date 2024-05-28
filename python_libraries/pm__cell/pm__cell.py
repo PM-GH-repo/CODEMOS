@@ -13,6 +13,7 @@ import	pm__utilities as pmut
 import	pm__data_from_file as pmdf
 #import	pm__latex_aid as pmla
 import	logging as log
+import time 
 
 """
 History
@@ -405,29 +406,68 @@ class Cell:
 					self.mult=1.
 					self.position_flag='Direct'
 					log.info("Reading file in LAMMPS format")
-					fin = open(filename,"r")
-							
+					fin = open(filename,"r")		
 
 					with fin as file:
 						aux_line = file.readlines()								
 					#get lattice
 					aux_lat=Lattice()
 					aux_atom=Atom()				
-					model = {}
+					data = {}
 					cart_pos_lst = []
 					model_data = {}
 					model_data['PTO_shimada'] = {}
 					for i, lines in enumerate(aux_line):
 						words = lines.split()
-						if 'atoms' in words:
-							model['atoms'] = int(words[words.index('atoms') - 1])
-						if 'bonds' in words:
-							model['bonds'] = int(words[words.index('bonds') - 1])
+						#print(words)
+						#print(model_data['PTO_shimada'],'at start')
+						if "ATOMS" in words and 'NUMBER' in words:
+							#print(int(aux_line[i+1]))							
+							atm_line = aux_line[i+1]
+							temp_line = atm_line.split()
+							#print(temp_line[0])
+							data['atoms'] =  int(temp_line[0])	
+							# hard coded the values of model['atom types'] = 6 since we have AB03  shell model so cadidate rememmber to change it later
+							data['atom types'] = 6
+							data['bond types'] = 3	
+							for jj in range(1,data['atom types']+1):
+								atom_type = jj								
+								model_data['PTO_shimada'][atom_type] = {}							
+								model_data['PTO_shimada'][atom_type]['core'] = {"mass": None, "charge": None }
+								model_data['PTO_shimada'][atom_type]['shell'] = {"mass": None,  "charge": None}													
+						if "BOUNDS" in words and 'BOX' in words:
+							bound_line =  aux_line[i+1]
+							temp_line = bound_line.split()
+							xlo_bound = float(temp_line[0])
+							xhi_bound = float(temp_line[1])
+							xy = float(temp_line[2])
+							bound_line =  aux_line[i+2]
+							temp_line = bound_line.split()
+							ylo_bound = float(temp_line[0])
+							yhi_bound = float(temp_line[1])
+							xz = float(temp_line[2])
+							bound_line =  aux_line[i+3]
+							temp_line = bound_line.split()
+							zlo = float(temp_line[0])
+							zhi = float(temp_line[1])
+							yz = float(temp_line[2])
+							aux_lat.a[0] = (xhi_bound - max(0.0,xy,xz,xy+xz))- (xlo_bound-min(0.0,xy,xz, xy+xz))
+							aux_lat.b[0] = xy
+							aux_lat.b[1] = (yhi_bound-max(0.0,yz)) - (ylo_bound-min(0.0,xy))
+							aux_lat.c[0] = xz
+							aux_lat.c[1] = yz
+							aux_lat.c[2] = zhi-zlo
+							#print(temp_line)
+						#print(model_data['PTO_shimada'])	
+						if 'atoms' in words and  'ITEM' not in words:
+							data['atoms'] = int(words[words.index('atoms') - 1])
+						if 'bonds' in words and  'ITEM' not in  words:
+							data['bonds'] = int(words[words.index('bonds') - 1])
 						if 'atom' in words and 'types' in  words:
-							model['atom types'] = int(words[words.index('atom') - 1])
+							data['atom types'] = int(words[words.index('atom') - 1])
 						if 'bond' in words and 'types' in  words:
-							model['bond types'] = int(words[words.index('bond') - 1])
-						if "xlo" in words:							
+							data['bond types'] = int(words[words.index('bond') - 1])
+						if "xlo" in words and  'ITEM:' not in  words:							
 							lx = float(words[words.index('xlo') - 1]) - float(words[words.index('xlo') - 2])
 							aux_lat.a[0] =lx
 						if "ylo" in words:
@@ -435,11 +475,9 @@ class Cell:
 							aux_lat.b[1] = ly
 						if "zlo" in words:
 							lz = float(words[words.index('zlo') - 1]) - float(words[words.index('zlo') - 2])						
-							aux_lat.c[2] = lz
-						#aux_lat.getAnglesFromVectors()
-						#self.lattice=aux_lat
+							aux_lat.c[2] = lz						
 						# for Triclinic (non-orthogonal) simulation boxes
-						if "xy" in words: 
+						if ("xy"  in words) and ("BOX" not in words): 
 							yz = float(words[words.index('xy') - 1])
 							xz = float(words[words.index('xy') - 2])
 							xy = float(words[words.index('xy') - 3])
@@ -457,9 +495,10 @@ class Cell:
 							aux_lat.c[2] = np.sqrt(c**2 - aux_lat.c[0]**2 - aux_lat.c[1]**2) #c_z
 							#print(alpha,beta,gamma)
 						aux_lat.getAnglesFromVectors()
-						self.lattice=aux_lat	
+						self.lattice=aux_lat
+						#print(model_data)	
 						if "Masses" in words:
-							for j in range(2,model['atom types']+2):
+							for j in range(2,data['atom types']+2):
 								mass_line = aux_line[i+j]
 								masses = mass_line.split()
 								atom_type = int(masses[0])
@@ -471,31 +510,44 @@ class Cell:
 									model_data['PTO_shimada'][atom_type] = {}							
 								model_data['PTO_shimada'][atom_type]['core'] = {"mass": None, "charge": None }
 								model_data['PTO_shimada'][atom_type]['shell'] = {"mass": None,  "charge": None}
-								if(atom_type<=int(model['atom types']/2)):
+								if(atom_type<=int(data['atom types']/2)):
 									model_data['PTO_shimada'][atom_type]["core"]["mass"] = atom_mass
 								else:
-									model_data['PTO_shimada'][atom_type]["shell"]["mass"] = atom_mass		
-						if "Atoms" in words:      
-							
-							model['total_atoms'] = {} 
-							for j in range(2,model['atoms']+2):
+									model_data['PTO_shimada'][atom_type]["shell"]["mass"] = atom_mass
+
+						#print(data['atoms'],"before_atoms")
+						model ={}
+						model['total_atoms'] = {}
+						if ("Atoms" in words) or ("x" in words and "y" in words and "z" in words) :
+							ii =2 
+							if ("x" in words and "y" in words and "z" in words):
+								ii=1							
+							 
+							#for j in range(2,model['atoms']+2):
+							for j in range(ii,data['atoms']+ii):
 								atoms_line = aux_line[i+j]
 								atoms_details = atoms_line.split()
-								atoms_tag = int(atoms_details[0])
-								bond_tag = int(atoms_details[1])
-								atom_type = int(atoms_details[2])
-								atom_charge = float(atoms_details[3]) 
-								pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]
-								#pos = pos.tolist()
+								if ii == 2:
+									atoms_tag = int(atoms_details[0])
+									bond_tag = int(atoms_details[1])
+									atom_type = int(atoms_details[2])
+									atom_charge = float(atoms_details[3]) 
+									pos = [float(atoms_details[4]),float(atoms_details[5]),float(atoms_details[6])]
+								else:
+									atoms_tag = int(atoms_details[0])
+									bond_tag = 0
+									atom_charge = 0.0
+									atom_type = int(atoms_details[1])
+									pos = [float(atoms_details[3]),float(atoms_details[4]),float(atoms_details[5])]														
 								cart_pos_lst.append(pos)
-								#print(j,atom_type,atoms_tag)
 								if atoms_tag not in model['total_atoms']:
 									model['total_atoms'][atoms_tag] = {}
 									model['total_atoms'][atoms_tag]["bond_tag"] = bond_tag
 									model['total_atoms'][atoms_tag]["atom_type"] = atom_type
 									model['total_atoms'][atoms_tag]["atom_charge"] = atom_charge
-									model['total_atoms'][atoms_tag]["pos"] = pos			
-								if(atom_type>int(model['atom types']/2)):
+									model['total_atoms'][atoms_tag]["pos"] = pos										
+								#print(j,atom_type,atoms_tag)
+								if(atom_type>int(data['atom types']/2)):
 									aux_atom.coreshell = "shell"
 									aux_atom.position_frac = [0,0,0]
 									aux_atom.name = str(atom_type)
@@ -511,7 +563,8 @@ class Cell:
 									aux_atom.charge = atom_charge
 									self.N+=1
 									self.atom.append(copy.deepcopy(aux_atom))
-									model_data['PTO_shimada'][atom_type]["core"]["charge"] = atom_charge
+									#print(model_data)
+									model_data['PTO_shimada'][atom_type]["core"]["charge"] = atom_charge									
 					cart_pos_lst = np.array(cart_pos_lst)			
 					self.setCartesian(cart_pos_lst)
 					self.shell_models = copy.deepcopy(model_data)
