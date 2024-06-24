@@ -159,7 +159,7 @@ class Cell:
 			aux_lat=Lattice()
 			aux_is_names_line=0
 			
-			self.comment=	fin.readline() # skip first line with comment
+			self.comment=	(fin.readline()[:-1]).strip() # change 24 june 2024 by PM # skip first line with comment
 			
 			line_mult=	fin.readline() # line with multiplication factor
 			aux_lat.mult=	float(line_mult)
@@ -1121,7 +1121,7 @@ class Cell:
 		#TODO: remove negative zero
 		#TODO: allow prescribing of decimal places for output
 		aux_string=""
-		aux_string=("#  %s" % self.comment) # removed \n tag getting error in VASP 6.4.2 when deepcopy existing cell 
+		aux_string=("#  %s\n" % self.comment) # removed \n tag getting error in VASP 6.4.2 when deepcopy existing cell 
 		aux_string+=("% 15.10f\n" % self.lattice.mult)		
 		aux_string+=("% 15.10f % 15.10f % 15.10f\n" % tuple(self.lattice.a))
 		aux_string+=("% 15.10f % 15.10f % 15.10f\n" % tuple(self.lattice.b))
