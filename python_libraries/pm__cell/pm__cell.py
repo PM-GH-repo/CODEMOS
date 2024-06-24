@@ -1120,13 +1120,9 @@ class Cell:
 		log.info("Writing to " + nfile + " in VASP format")
 		#TODO: remove negative zero
 		#TODO: allow prescribing of decimal places for output
-
 		aux_string=""
-
-		aux_string+=("#  %s\n" % self.comment)
-		
-		aux_string+=("% 15.10f\n" % self.lattice.mult)
-		
+		aux_string=("#  %s" % self.comment) # removed \n tag getting error in VASP 6.4.2 when deepcopy existing cell 
+		aux_string+=("% 15.10f\n" % self.lattice.mult)		
 		aux_string+=("% 15.10f % 15.10f % 15.10f\n" % tuple(self.lattice.a))
 		aux_string+=("% 15.10f % 15.10f % 15.10f\n" % tuple(self.lattice.b))
 		aux_string+=("% 15.10f % 15.10f % 15.10f\n" % tuple(self.lattice.c))
