@@ -118,11 +118,12 @@ class Cell:
 #    			}
 #					}
 
-	def __init__(self,filename="default_file",convention=None,prescribe_N=0,comment="no comment"):
+	def __init__(self,filename="default_file",convention=None,prescribe_N=0,comment="no comment",snapshot=0):
 		"""
 		__init__ file for the Cell class\n
 		:param filename: Structural input file
 		:param convention: Type of the structural file if it cannot be recognized from filename
+		:param snapshot: Index of the snapshot to read from the file
 		"""
 		self.atom=[]
 		self.lattice=None
@@ -134,7 +135,7 @@ class Cell:
 		#self.shell_model_values={}
 		self.shell_models ={}
 		self.N=0
-
+		self.snapshot = snapshot
 		def zeroList(self,perscribe_N):
 			self.position_flag='Direct'
 			self.lattice=Lattice()
@@ -428,8 +429,12 @@ class Cell:
 							#print(temp_line[0])
 							data['atoms'] =  int(temp_line[0])	
 							# hard coded the values of model['atom types'] = 6 since we have AB03  shell model so cadidate rememmber to change it later
-							data['atom types'] = 6
-							data['bond types'] = 3	
+							#data['atom types'] = 6
+							#data['bond types'] = 3	
+						if 'atom' in words and 'types' in  words:
+							data['atom types'] = int(words[words.index('atom') - 1])
+						if 'bond' in words and 'types' in  words:
+							data['bond types'] = int(words[words.index('bond') - 1])
 							for jj in range(1,data['atom types']+1):
 								atom_type = jj								
 								model_data['PTO_shimada'][atom_type] = {}							
@@ -568,7 +573,73 @@ class Cell:
 					cart_pos_lst = np.array(cart_pos_lst)			
 					self.setCartesian(cart_pos_lst)
 					self.shell_models = copy.deepcopy(model_data)
+					fin.close()
 					
+		def readFromLAMMPSDump(self, filename,snapshot):  # ,model_name):
+			"""
+			Reads LAMMPS dump file using ASE library.
+			:param filename: Name of the LAMMPS dump file
+			:param snapshot: Index of snapshot to read, e.g., 1, 5, 10, -1, -5 etc (- if you want read snpshot from decending order)
+			"""
+			from ase.io import read
+			#print(snapshot,self.snapshot)
+			#self.snapshot = snapshot			
+			aux_lat = Lattice()
+			aux_atom = Atom()
+			data = {}
+			cart_pos_lst = []
+			model_data = {}
+			model_data['PTO_shimada'] = {}
+			trajectory = read(filename, format='lammps-dump-text', index=':')
+			cart_pos_lst = trajectory[snapshot].get_positions()
+			atom_id = trajectory[snapshot].get_atomic_numbers()
+			
+			data['atoms'] = trajectory[snapshot].get_global_number_of_atoms()
+			data['bonds'] = int(data['atoms'] / 2.0)
+			data['atom types'] = np.unique(atom_id)
+			data['bond types'] = int(data['atom types'].size / 2.0)
+			lat_vec = trajectory[snapshot].get_cell()
+			aux_lat.a = lat_vec[0]
+			aux_lat.b = lat_vec[1]
+			aux_lat.c = lat_vec[2]
+			aux_lat.getAnglesFromVectors()
+			self.lattice = aux_lat
+			for jj in range(0, data['atom types'].size):
+				atom_type = data['atom types'][jj]
+				model_data['PTO_shimada'][atom_type] = {}
+				model_data['PTO_shimada'][atom_type]['core'] = {"mass": None, "charge": None}
+				model_data['PTO_shimada'][atom_type]['shell'] = {"mass": None, "charge": None}
+			model = {}
+			model['total_atoms'] = {}
+			#print(data['atoms'])
+			for j in range(1, data['atoms'] + 1):
+				atoms_tag = j
+				atom_type = atom_id[j - 1]
+				#atom_charge = None
+				model['total_atoms'][atoms_tag] = {}
+				model['total_atoms'][atoms_tag]["bond_tag"] = None  # this information not available inside the dump file
+				model['total_atoms'][atoms_tag]["atom_type"] = atom_type
+				#model['total_atoms'][atoms_tag]["atom_charge"] = atom_charge  # this information not available inside the dump file
+				if atom_type > int(data['atom types'].size / 2):
+					aux_atom.coreshell = "shell"
+					aux_atom.position_frac = [0, 0, 0]
+					aux_atom.name = str(atom_type)
+					#aux_atom.charge = atom_charge
+					#model_data['PTO_shimada'][atom_type]["shell"]["charge"] = atom_charge
+					self.N += 1
+					self.atom.append(copy.deepcopy(aux_atom))
+				else:
+					aux_atom.coreshell = "core"
+					aux_atom.position_frac = [0, 0, 0]
+					aux_atom.name = str(atom_type)
+					#aux_atom.charge = atom_charge
+					self.N += 1
+					self.atom.append(copy.deepcopy(aux_atom))
+					#model_data['PTO_shimada'][atom_type]["core"]["charge"] = atom_charge
+			self.setCartesian(cart_pos_lst)
+			self.shell_models = copy.deepcopy(model_data)
+
+
 
 		if 	convention == 'POSCAR' or \
 			re.findall('VASP',filename.upper()) or \
@@ -588,6 +659,8 @@ class Cell:
 			readFromXYZ(self,filename)
 		elif convention == 'LAMMPSStructure' or os.path.splitext(filename)[1] == '.LAMMPSStructure' or os.path.splitext(filename)[1] == '.lammpssructure':
 			readFromLAMMPSStructure(self,filename)
+		elif convention == 'lammps-dump-text':
+			readFromLAMMPSDump(self,filename,snapshot)			
 		elif convention == 'zerolist':
 			zeroList(self,prescribe_N)
 		else:
@@ -1499,6 +1572,6 @@ class Cell:
 		print("Final sum for the structure with distance = ", distance, "from the 0-th atom is: ")
 		#print "  Lattice: ", res_latt
 		print("  Atoms  : %.6f"%res_atom)
-							
 
-		
+
+
